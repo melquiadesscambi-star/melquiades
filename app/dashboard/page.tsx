@@ -116,13 +116,23 @@ export default async function DashboardPage() {
                         )}
                       </div>
                       {match.manoscritti && (
-                        <p className="font-serif text-lg" style={{ color: 'var(--blu-notte)' }}>
-                          {match.manoscritti.titolo
-                            ? <em>{match.manoscritti.titolo}</em>
-                            : `${match.manoscritti.macro_area} — ${match.manoscritti.genere}`}
-                        </p>
+                        <>
+                          <p className="font-serif text-lg" style={{ color: 'var(--blu-notte)' }}>
+                            {match.manoscritti.titolo
+                              ? <em>{match.manoscritti.titolo}</em>
+                              : `${match.manoscritti.macro_area} — ${match.manoscritti.genere}`}
+                          </p>
+                          {match.manoscritti.sinossi && (
+                            <p className="font-serif text-sm mt-2 leading-relaxed" style={{ color: 'var(--blu-grigio)' }}>
+                              {match.manoscritti.sinossi}
+                            </p>
+                          )}
+                          <p className="font-serif text-xs mt-1" style={{ color: 'var(--blu-grigio)', opacity: 0.6 }}>
+                            {match.manoscritti.fascia_pagine} pagine
+                          </p>
+                        </>
                       )}
-                      <p className="font-serif text-sm mt-1" style={{ color: 'var(--blu-grigio)' }}>
+                      <p className="font-serif text-sm mt-2" style={{ color: 'var(--blu-grigio)' }}>
                         {isScrive
                           ? `Lettore: ${match.email_lettore}`
                           : `Scrittore: ${match.email_scrittore}`}
