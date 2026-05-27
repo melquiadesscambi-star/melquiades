@@ -139,7 +139,7 @@ export default function RichiestaLetturaPage() {
             </p>
           )}
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => { router.push('/dashboard'); router.refresh() }}
             className="btn-primario"
           >
             Torna alla bacheca
