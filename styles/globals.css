@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --avorio: #F5F2EC;
+  --blu-notte: #1C2B4A;
+  --oro: #9B7B3A;
+  --blu-grigio: #5A6E8C;
+  --oro-chiaro: #C4A96A;
+  --avorio-scuro: #EDE8DF;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--avorio);
+  color: var(--blu-notte);
+  font-family: 'EB Garamond', Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Double gold border utility */
+.doppio-bordo {
+  border: 1px solid var(--oro);
+  outline: 1px solid var(--oro);
+  outline-offset: 3px;
+}
+
+.doppio-bordo-inner {
+  border: 1px solid var(--oro);
+  box-shadow: inset 0 0 0 4px var(--avorio), inset 0 0 0 5px var(--oro);
+}
+
+/* Separator */
+.separatore::before {
+  content: '✦ ✦ ✦';
+  display: block;
+  text-align: center;
+  color: var(--oro);
+  letter-spacing: 0.5em;
+  font-size: 0.75rem;
+}
+
+/* Paper texture overlay */
+.texture-carta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Input styles */
+.input-melquiades {
+  @apply w-full bg-transparent border-b border-oro/50 py-3 px-0 text-blu-notte font-serif text-lg placeholder:text-blu-grigio/50 focus:outline-none focus:border-oro transition-colors;
+}
+
+.input-melquiades:focus {
+  border-bottom-color: var(--oro);
+}
+
+/* Button styles */
+.btn-primario {
+  @apply inline-flex items-center gap-2 bg-blu-notte text-avorio font-serif text-lg px-8 py-3 transition-all duration-300 hover:bg-blu-notte-chiaro;
+  border: 1px solid transparent;
+}
+
+.btn-secondario {
+  @apply inline-flex items-center gap-2 text-blu-notte font-serif text-lg px-8 py-3 transition-all duration-300;
+  border: 1px solid var(--blu-notte);
+}
+
+.btn-secondario:hover {
+  background: var(--blu-notte);
+  color: var(--avorio);
+}
+
+/* Badge oro */
+.badge-oro {
+  @apply inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-xs font-serif;
+  background: var(--oro);
+  color: var(--avorio);
+}
+
+.badge-grigio {
+  @apply inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-xs font-serif;
+  background: var(--blu-grigio);
+  opacity: 0.4;
+  color: var(--avorio);
+}
+
+/* Card manoscritto */
+.card-manoscritto {
+  @apply relative bg-avorio border border-oro/30 p-6 transition-all duration-300;
+}
+
+.card-manoscritto::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid color-mix(in srgb, var(--oro) 20%, transparent);
+  pointer-events: none;
+}
+
+.card-manoscritto:hover {
+  border-color: var(--oro);
+  box-shadow: 0 8px 32px rgba(28, 43, 74, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Fade animations with delay */
+.animate-delay-100 { animation-delay: 100ms; }
+.animate-delay-200 { animation-delay: 200ms; }
+.animate-delay-300 { animation-delay: 300ms; }
+.animate-delay-400 { animation-delay: 400ms; }
+.animate-delay-500 { animation-delay: 500ms; }
+.animate-delay-600 { animation-delay: 600ms; }
+
+.opacity-0-init { opacity: 0; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--avorio); }
+::-webkit-scrollbar-thumb { background: var(--oro); border-radius: 3px; }
+
+/* Selection */
+::selection { background: var(--oro); color: var(--avorio); }
