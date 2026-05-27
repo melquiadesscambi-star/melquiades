@@ -89,7 +89,7 @@ export default function ManoscrittoPage() {
               Siamo agli inizi. Il tuo primo match potrebbe richiedere qualche settimana.
             </p>
           )}
-          <button onClick={() => router.push('/dashboard')} className="btn-primario">
+          <button onClick={() => { router.push('/dashboard'); router.refresh() }} className="btn-primario">
             Torna alla bacheca
           </button>
         </div>
