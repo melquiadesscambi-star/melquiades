@@ -1,33 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bvhmqqxpiuqlmsmmznyu.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2aG1xcXhwaXVxbG1zbW16bnl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NzA1ODcsImV4cCI6MjA5NTQ0NjU4N30.gXVmJgwlAgBl2LgifTevU9ijKAvZtRZLmhaPI9-VuAw'
 
-// Client-side Supabase client
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
-
-// Server-side Supabase client (with cookies for SSR)
-export function createSupabaseServerClient() {
-  const cookieStore = cookies()
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        cookieStore.set({ name, value, ...options })
-      },
-      remove(name: string, options: CookieOptions) {
-        cookieStore.set({ name, value: '', ...options })
-      },
-    },
-  })
-}
-
-// Admin client (server-side only, bypasses RLS)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
-})
+export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey)
+export const supabaseClient = supabaseAdmin
