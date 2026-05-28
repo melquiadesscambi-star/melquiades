@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { leggiSessione } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import BottoneRitira from '@/components/BottoneRitira'
 
 export default async function DashboardPage() {
   const sessione = await leggiSessione()
@@ -40,6 +41,8 @@ export default async function DashboardPage() {
   const nomeAbbreviato = utente?.nome?.split(' ')[0] || sessione.nome
   const haManoscrittoAttivo = manoscritti?.some(m => m.stato === 'in_attesa')
   const haRichiestaAttiva = richieste?.some(r => r.stato === 'in_attesa')
+  const richiestaAttiva = richieste?.find(r => r.stato === 'in_attesa')
+  const manoscrittoAttivo = manoscritti?.find(m => m.stato === 'in_attesa')
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -180,6 +183,17 @@ export default async function DashboardPage() {
                   </p>
                 </div>
               ))}
+              {richiestaAttiva && (
+                <div style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)', paddingTop: '12px', marginTop: '12px' }}>
+                  <BottoneRitira
+                    id={richiestaAttiva.id}
+                    tipo="richiesta"
+                    label="Ritira la richiesta di lettura"
+                    messaggioConferma="Sei sicuro? Potrai presentarne una nuova in qualsiasi momento."
+                    messaggioRitirato="Richiesta ritirata."
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -231,6 +245,17 @@ export default async function DashboardPage() {
                   </p>
                 </div>
               ))}
+              {manoscrittoAttivo && (
+                <div style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)', paddingTop: '12px', marginTop: '12px' }}>
+                  <BottoneRitira
+                    id={manoscrittoAttivo.id}
+                    tipo="manoscritto"
+                    label="Ritira il manoscritto"
+                    messaggioConferma="Sei sicuro? Potrai caricarne uno nuovo quando vuoi."
+                    messaggioRitirato="Manoscritto ritirato."
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div
