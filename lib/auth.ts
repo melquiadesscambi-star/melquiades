@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from './supabase'
 import type { SessionData } from '@/types'
 
-const JWT_SECRET_VALUE = process.env.JWT_SECRET || '779168a8fef8387106a291b0135fa13cca139c9ee90527ab83f8556475353dfa5d2e93e5fef580bf00422ebda560176a'
+const JWT_SECRET_VALUE = process.env.JWT_SECRET!
 const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_VALUE)
 const SESSION_COOKIE = 'melquiades_sessione'
 
