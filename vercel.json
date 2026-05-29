@@ -3,5 +3,11 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["cdg1"]
+  "regions": ["cdg1"],
+  "crons": [
+    {
+      "path": "/api/cron/scadenze",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

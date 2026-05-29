@@ -176,7 +176,7 @@ export async function eseguiMatch(
 // La data_registrazione NON viene toccata: la posizione FIFO è preservata.
 // La proposta resta registrata (stato rifiutata/scaduta): così quel
 // manoscritto non sarà mai più proposto a quel lettore.
-async function liberaProposta(
+export async function liberaProposta(
   proposta: { id: string; id_manoscritto: string; id_richiesta: string },
   nuovoStato: 'rifiutata' | 'scaduta'
 ): Promise<void> {
@@ -188,6 +188,58 @@ async function liberaProposta(
     supabaseAdmin.from('manoscritti').update({ stato: 'in_attesa' }).eq('id', proposta.id_manoscritto),
     supabaseAdmin.from('richieste').update({ stato: 'in_attesa' }).eq('id', proposta.id_richiesta),
   ])
+}
+
+// Cerca tutte le proposte in_sospeso scadute e le libera.
+// Per ognuna: segna come 'scaduta', rimette in coda manoscritto e richiesta,
+// rilancia il matching per entrambi. Chiamata dal cron giornaliero.
+export async function liberaProposteScadute(): Promise<{
+  elaborate: number
+  errori: number
+}> {
+  const { data: scadute, error } = await supabaseAdmin
+    .from('proposte')
+    .select('*')
+    .eq('stato', 'in_sospeso')
+    .lt('scade_il', new Date().toISOString())
+
+  if (error || !scadute?.length) return { elaborate: 0, errori: 0 }
+
+  let elaborate = 0
+  let errori = 0
+
+  for (const proposta of scadute) {
+    try {
+      await liberaProposta(proposta, 'scaduta')
+
+      const { data: richiesta } = await supabaseAdmin
+        .from('richieste')
+        .select('*')
+        .eq('id', proposta.id_richiesta)
+        .single()
+      if (richiesta && richiesta.stato === 'in_attesa') {
+        const cand = await trovaCandidatoPerRichiesta(richiesta as RichiestaLettura)
+        if (cand) await apriProposta(cand.id, richiesta.id)
+      }
+
+      const { data: manoscritto } = await supabaseAdmin
+        .from('manoscritti')
+        .select('*')
+        .eq('id', proposta.id_manoscritto)
+        .single()
+      if (manoscritto && manoscritto.stato === 'in_attesa') {
+        const cand = await trovaCandidatoPerManoscritto(manoscritto as Manoscritto)
+        if (cand) await apriProposta(manoscritto.id, cand.id)
+      }
+
+      elaborate++
+    } catch (err) {
+      console.error('[liberaProposteScadute] Errore su proposta', proposta.id, err)
+      errori++
+    }
+  }
+
+  return { elaborate, errori }
 }
 
 type EsitoConferma =
