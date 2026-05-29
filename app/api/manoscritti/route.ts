@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     .from('manoscritti')
     .select('id')
     .eq('email_scrittore', sessione.email)
-    .eq('stato', 'in_attesa')
+    .in('stato', ['in_attesa', 'in_proposta'])
 
   if (attivi && attivi.length > 0) {
     return NextResponse.json(

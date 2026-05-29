@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     .from('richieste')
     .select('id')
     .eq('email_lettore', sessione.email)
-    .eq('stato', 'in_attesa')
+    .in('stato', ['in_attesa', 'in_proposta'])
 
   if (attive && attive.length > 0) {
     return NextResponse.json(
