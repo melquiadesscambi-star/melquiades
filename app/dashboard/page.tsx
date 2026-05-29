@@ -3,26 +3,24 @@ import Link from 'next/link'
 import { leggiSessione } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import BottoneRitira from '@/components/BottoneRitira'
+import PropostaCard from '@/components/PropostaCard'
 
 export default async function DashboardPage() {
   const sessione = await leggiSessione()
   if (!sessione) redirect('/auth/login')
 
-  // Recupera dati utente aggiornati
   const { data: utente } = await supabaseAdmin
     .from('utenti')
     .select('*')
     .eq('email', sessione.email)
     .single()
 
-  // Recupera match dell'utente
   const { data: matches } = await supabaseAdmin
     .from('match')
     .select('*, manoscritti:id_manoscritto(*)')
     .or(`email_scrittore.eq.${sessione.email},email_lettore.eq.${sessione.email}`)
     .order('data_match', { ascending: false })
 
-  // Manoscritti in attesa
   const { data: manoscritti } = await supabaseAdmin
     .from('manoscritti')
     .select('*')
@@ -30,7 +28,6 @@ export default async function DashboardPage() {
     .order('data_registrazione', { ascending: false })
     .limit(3)
 
-  // Richieste in attesa
   const { data: richieste } = await supabaseAdmin
     .from('richieste')
     .select('*')
@@ -38,11 +35,38 @@ export default async function DashboardPage() {
     .order('data_registrazione', { ascending: false })
     .limit(3)
 
+  const { data: proposteRaw } = await supabaseAdmin
+    .from('proposte')
+    .select('id, id_manoscritto, creata_il, scade_il')
+    .eq('email_lettore', sessione.email)
+    .eq('stato', 'in_sospeso')
+    .order('creata_il', { ascending: true })
+
+  let proposteConOpera: any[] = []
+  if (proposteRaw && proposteRaw.length > 0) {
+    const ids = proposteRaw.map((p) => p.id_manoscritto)
+    const { data: manoscritti_prop } = await supabaseAdmin
+      .from('manoscritti')
+      .select('id, titolo, macro_area, genere, sottogeneri, fascia_pagine, sinossi, is_raccolta, is_incompiuto')
+      .in('id', ids)
+    const mappa = Object.fromEntries((manoscritti_prop || []).map((m) => [m.id, m]))
+    proposteConOpera = proposteRaw.map((p) => ({
+      id_proposta: p.id,
+      creata_il: p.creata_il,
+      scade_il: p.scade_il,
+      opera: mappa[p.id_manoscritto] || null,
+    }))
+  }
+
   const nomeAbbreviato = utente?.nome?.split(' ')[0] || sessione.nome
-  const haManoscrittoAttivo = manoscritti?.some(m => m.stato === 'in_attesa')
-  const haRichiestaAttiva = richieste?.some(r => r.stato === 'in_attesa')
+  const haManoscrittoAttivo = manoscritti?.some(m => m.stato === 'in_attesa' || m.stato === 'in_proposta')
+  const haRichiestaAttiva = richieste?.some(r => r.stato === 'in_attesa' || r.stato === 'in_proposta')
   const richiestaAttiva = richieste?.find(r => r.stato === 'in_attesa')
+  const richiestaInProposta = richieste?.find(r => r.stato === 'in_proposta')
   const manoscrittoAttivo = manoscritti?.find(m => m.stato === 'in_attesa')
+  const manoscrittoInProposta = manoscritti?.find(m => m.stato === 'in_proposta')
+  const richiestaVisualizzata = richiestaAttiva || richiestaInProposta || null
+  const manoscrittoVisualizzato = manoscrittoAttivo || manoscrittoInProposta || null
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -58,6 +82,11 @@ export default async function DashboardPage() {
             : 'Su Melquíades si entra leggendo. Il tuo primo passo è richiedere una lettura.'}
         </p>
       </div>
+
+      {/* Proposte in sospeso */}
+      {proposteConOpera.filter((p) => p.opera !== null).map((p) => (
+        <PropostaCard key={p.id_proposta} proposta={p} />
+      ))}
 
       {/* Avviso primo accesso */}
       {!utente?.sbloccato && !haRichiestaAttiva && (
@@ -94,11 +123,7 @@ export default async function DashboardPage() {
               })
 
               return (
-                <div
-                  key={match.id}
-                  className="card-manoscritto"
-                  style={{ cursor: 'default' }}
-                >
+                <div key={match.id} className="card-manoscritto" style={{ cursor: 'default' }}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-3 mb-2">
@@ -154,35 +179,33 @@ export default async function DashboardPage() {
 
       {/* Stato corrente */}
       <div className="grid md:grid-cols-2 gap-6 mb-12">
-        {/* Richiesta di lettura */}
+
+        {/* Come lettore */}
         <div>
           <h3 className="font-serif font-normal text-xl mb-4" style={{ color: 'var(--blu-notte)' }}>
             Come lettore
           </h3>
           {haRichiestaAttiva ? (
-            <div
-              className="p-5"
-              style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)' }}
-            >
+            <div className="p-5" style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)' }}>
               <div className="flex items-center gap-2 mb-3">
                 <span
                   className="w-2 h-2 rounded-full"
-                  style={{ background: 'var(--oro)' }}
+                  style={{ background: richiestaInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }}
                 />
-                <span className="font-serif text-sm" style={{ color: 'var(--oro)' }}>
-                  Richiesta in attesa
+                <span className="font-serif text-sm" style={{ color: richiestaInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }}>
+                  {richiestaInProposta ? 'Proposta in corso' : 'Richiesta in attesa'}
                 </span>
               </div>
-              {richieste?.filter(r => r.stato === 'in_attesa').map((r: any) => (
-                <div key={r.id}>
+              {richiestaVisualizzata && (
+                <div>
                   <p className="font-serif text-sm" style={{ color: 'var(--blu-grigio)' }}>
-                    Generi: {r.generi_accettati?.join(', ')}
+                    Generi: {richiestaVisualizzata.generi_accettati?.join(', ')}
                   </p>
                   <p className="font-serif text-sm" style={{ color: 'var(--blu-grigio)' }}>
-                    Lunghezza max: {r.lunghezza_massima} pagine
+                    Lunghezza max: {richiestaVisualizzata.lunghezza_massima} pagine
                   </p>
                 </div>
-              ))}
+              )}
               {richiestaAttiva && (
                 <div style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)', paddingTop: '12px', marginTop: '12px' }}>
                   <BottoneRitira
@@ -196,10 +219,7 @@ export default async function DashboardPage() {
               )}
             </div>
           ) : (
-            <div
-              className="p-5"
-              style={{ border: '1px dashed color-mix(in srgb, var(--oro) 30%, transparent)' }}
-            >
+            <div className="p-5" style={{ border: '1px dashed color-mix(in srgb, var(--oro) 30%, transparent)' }}>
               <p className="font-serif text-sm mb-4" style={{ color: 'var(--blu-grigio)' }}>
                 Nessuna richiesta attiva.
               </p>
@@ -210,41 +230,35 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Manoscritto */}
+        {/* Come scrittore */}
         <div>
           <h3 className="font-serif font-normal text-xl mb-4" style={{ color: 'var(--blu-notte)' }}>
             Come scrittore
           </h3>
           {!utente?.sbloccato ? (
-            <div
-              className="p-5"
-              style={{ border: '1px dashed color-mix(in srgb, var(--oro) 20%, transparent)', opacity: 0.6 }}
-            >
+            <div className="p-5" style={{ border: '1px dashed color-mix(in srgb, var(--oro) 20%, transparent)', opacity: 0.6 }}>
               <p className="font-serif text-sm" style={{ color: 'var(--blu-grigio)' }}>
                 Disponibile dopo il primo match come lettore.
               </p>
             </div>
           ) : haManoscrittoAttivo ? (
-            <div
-              className="p-5"
-              style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)' }}
-            >
+            <div className="p-5" style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)' }}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full" style={{ background: 'var(--oro)' }} />
-                <span className="font-serif text-sm" style={{ color: 'var(--oro)' }}>
-                  Manoscritto in attesa
+                <span className="w-2 h-2 rounded-full" style={{ background: manoscrittoInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }} />
+                <span className="font-serif text-sm" style={{ color: manoscrittoInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }}>
+                  {manoscrittoInProposta ? 'In valutazione' : 'Manoscritto in attesa'}
                 </span>
               </div>
-              {manoscritti?.filter(m => m.stato === 'in_attesa').map((m: any) => (
-                <div key={m.id}>
+              {manoscrittoVisualizzato && (
+                <div>
                   <p className="font-serif text-sm" style={{ color: 'var(--blu-notte)' }}>
-                    {m.titolo ? <em>{m.titolo}</em> : `${m.genere}`}
+                    {manoscrittoVisualizzato.titolo ? <em>{manoscrittoVisualizzato.titolo}</em> : `${manoscrittoVisualizzato.genere}`}
                   </p>
                   <p className="font-serif text-sm" style={{ color: 'var(--blu-grigio)' }}>
-                    {m.fascia_pagine} pagine
+                    {manoscrittoVisualizzato.fascia_pagine} pagine
                   </p>
                 </div>
-              ))}
+              )}
               {manoscrittoAttivo && (
                 <div style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)', paddingTop: '12px', marginTop: '12px' }}>
                   <BottoneRitira
@@ -258,10 +272,7 @@ export default async function DashboardPage() {
               )}
             </div>
           ) : (
-            <div
-              className="p-5"
-              style={{ border: '1px dashed color-mix(in srgb, var(--oro) 30%, transparent)' }}
-            >
+            <div className="p-5" style={{ border: '1px dashed color-mix(in srgb, var(--oro) 30%, transparent)' }}>
               <p className="font-serif text-sm mb-4" style={{ color: 'var(--blu-grigio)' }}>
                 Nessun manoscritto in attesa.
               </p>
@@ -273,11 +284,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats semplici */}
-      <div
-        className="py-8 text-center"
-        style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)' }}
-      >
+      {/* Stats */}
+      <div className="py-8 text-center" style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)' }}>
         <div className="grid grid-cols-3 gap-8 max-w-sm mx-auto">
           <div>
             <p className="font-serif text-3xl font-normal" style={{ color: 'var(--blu-notte)' }}>
