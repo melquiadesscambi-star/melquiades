@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { leggiSessione } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { trovaCandidatoPerManoscritto, eseguiMatch } from '@/lib/matching'
-import { notificaMatchGestore } from '@/lib/email'
+import { trovaCandidatoPerManoscritto, apriProposta } from '@/lib/matching'
 
 // GET - manoscritti dell'utente corrente
 export async function GET() {
@@ -82,25 +81,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore inserimento' }, { status: 500 })
   }
 
-  // Prova il matching
+  // Prova il matching. ATTENZIONE: se viene aperta una proposta NON va
+  // rivelato allo scrittore. La risposta resta sempre neutra.
   const candidato = await trovaCandidatoPerManoscritto(manoscritto)
   if (candidato) {
-    const { id: matchId, primoMatchLettore } = await eseguiMatch(manoscritto.id, candidato.id)
-    
-    // Notifica gestore
-    try {
-      await notificaMatchGestore(
-        { ...manoscritto, nome_scrittore: utente.nome },
-        { ...candidato, nome_lettore: candidato.nome_lettore },
-        matchId,
-        primoMatchLettore
-      )
-    } catch (e) {
-      console.error('Errore notifica email:', e)
-    }
-
-    return NextResponse.json({ ...manoscritto, match_trovato: true })
+    await apriProposta(manoscritto.id, candidato.id)
   }
-
-  return NextResponse.json({ ...manoscritto, match_trovato: false })
+  return NextResponse.json({ ...manoscritto })
 }

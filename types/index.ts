@@ -59,7 +59,7 @@ export interface Manoscritto {
   sottogeneri?: string[]
   fascia_pagine: FasciaPagine
   sinossi: string
-  stato: 'in_attesa' | 'matchato' | 'ritirato'
+  stato: 'in_attesa' | 'in_proposta' | 'matchato' | 'ritirato'
   data_registrazione: string
   id_match?: string
   is_raccolta: boolean
@@ -74,7 +74,7 @@ export interface RichiestaLettura {
   generi_accettati: string[]
   macro_aree_accettate: MacroArea[]
   lunghezza_massima: FasciaPagine
-  stato: 'in_attesa' | 'matchata' | 'ritirata'
+  stato: 'in_attesa' | 'in_proposta' | 'matchata' | 'ritirata'
   data_registrazione: string
   id_match?: string
   nome_lettore?: string
@@ -90,6 +90,18 @@ export interface Match {
   primo_match_lettore: boolean
   nome_scrittore?: string
   nome_lettore?: string
+}
+
+export interface Proposta {
+  id: string
+  id_manoscritto: string
+  id_richiesta: string
+  email_lettore: string
+  email_scrittore: string
+  stato: 'in_sospeso' | 'confermata' | 'rifiutata' | 'scaduta'
+  creata_il: string
+  scade_il: string
+  risposta_il?: string
 }
 
 export interface NudgeData {

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { leggiSessione } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { trovaCandidatoPerRichiesta, eseguiMatch } from '@/lib/matching'
-import { notificaMatchGestore } from '@/lib/email'
+import { trovaCandidatoPerRichiesta, apriProposta } from '@/lib/matching'
 
 // GET - richieste dell'utente corrente
 export async function GET() {
@@ -70,31 +69,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore inserimento' }, { status: 500 })
   }
 
-  // Prova il matching
+  // Prova il matching. Qui il lettore PUÒ sapere di avere una proposta:
+  // è lui che dovrà confermarla o rifiutarla.
   const candidato = await trovaCandidatoPerRichiesta(richiesta)
   if (candidato) {
-    const { id: matchId, primoMatchLettore } = await eseguiMatch(candidato.id, richiesta.id)
-
-    // Notifica gestore
-    try {
-      const { data: scrittore } = await supabaseAdmin
-        .from('utenti')
-        .select('nome')
-        .eq('email', candidato.email_scrittore)
-        .single()
-
-      await notificaMatchGestore(
-        { ...candidato, nome_scrittore: scrittore?.nome },
-        { ...richiesta, nome_lettore: utente?.nome },
-        matchId,
-        primoMatchLettore
-      )
-    } catch (e) {
-      console.error('Errore notifica email:', e)
-    }
-
-    return NextResponse.json({ ...richiesta, match_trovato: true })
+    await apriProposta(candidato.id, richiesta.id)
+    return NextResponse.json({ ...richiesta, proposta_aperta: true })
   }
-
-  return NextResponse.json({ ...richiesta, match_trovato: false })
+  return NextResponse.json({ ...richiesta, proposta_aperta: false })
 }
