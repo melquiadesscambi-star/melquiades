@@ -18,8 +18,30 @@ export async function PATCH(
   if (!richiesta) return NextResponse.json({ error: 'Non trovata' }, { status: 404 })
   if (richiesta.email_lettore !== sessione.email)
     return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
-  if (richiesta.stato !== 'in_attesa')
+  if (!['in_attesa', 'in_proposta'].includes(richiesta.stato))
     return NextResponse.json({ error: 'Non puoi ritirare una richiesta già matchata.' }, { status: 400 })
+
+  // Se in_proposta, chiudi la proposta attiva e rimetti in coda il manoscritto dello scrittore
+  if (richiesta.stato === 'in_proposta') {
+    const { data: proposta } = await supabaseAdmin
+      .from('proposte')
+      .select('id, id_manoscritto')
+      .eq('id_richiesta', params.id)
+      .eq('stato', 'in_sospeso')
+      .single()
+
+    if (proposta) {
+      await supabaseAdmin
+        .from('proposte')
+        .update({ stato: 'scaduta', risposta_il: new Date().toISOString() })
+        .eq('id', proposta.id)
+
+      await supabaseAdmin
+        .from('manoscritti')
+        .update({ stato: 'in_attesa' })
+        .eq('id', proposta.id_manoscritto)
+    }
+  }
 
   await supabaseAdmin
     .from('richieste')
