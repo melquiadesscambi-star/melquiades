@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   if (!id_proposta) return NextResponse.json({ error: 'id_proposta mancante' }, { status: 400 })
 
   const esito = await confermaProposta(id_proposta, sessione.email)
-  if (!esito.ok) return NextResponse.json({ error: esito.errore }, { status: esito.status })
+  if (!esito.ok) return NextResponse.json({ error: esito.errore, motivo: esito.motivo }, { status: esito.status })
 
   // Match reale avvenuto → notifica il gestore.
   try {

@@ -244,7 +244,7 @@ export async function liberaProposteScadute(): Promise<{
 
 type EsitoConferma =
   | { ok: true; matchId: string; primoMatchLettore: boolean; idManoscritto: string; idRichiesta: string }
-  | { ok: false; errore: string; status: number }
+  | { ok: false; errore: string; status: number; motivo?: 'ritirato' | 'scaduto' }
 
 // Conferma di una proposta da parte del lettore.
 export async function confermaProposta(
@@ -254,7 +254,15 @@ export async function confermaProposta(
   const { data: p } = await supabaseAdmin.from('proposte').select('*').eq('id', idProposta).single()
   if (!p) return { ok: false, errore: 'Proposta non trovata', status: 404 }
   if (p.email_lettore !== emailLettore) return { ok: false, errore: 'Non autorizzato', status: 403 }
-  if (p.stato !== 'in_sospeso') return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409 }
+  if (p.stato !== 'in_sospeso') {
+    const { data: man } = await supabaseAdmin
+      .from('manoscritti')
+      .select('stato')
+      .eq('id', p.id_manoscritto)
+      .single()
+    const motivo = man?.stato === 'ritirato' ? 'ritirato' : 'scaduto'
+    return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409, motivo }
+  }
   if (new Date(p.scade_il) < new Date()) {
     await liberaProposta(p, 'scaduta')
     return { ok: false, errore: 'Il tempo per rispondere è scaduto', status: 410 }
@@ -269,7 +277,7 @@ export async function confermaProposta(
   return { ok: true, matchId, primoMatchLettore, idManoscritto: p.id_manoscritto, idRichiesta: p.id_richiesta }
 }
 
-type EsitoRifiuto = { ok: true } | { ok: false; errore: string; status: number }
+type EsitoRifiuto = { ok: true } | { ok: false; errore: string; status: number; motivo?: 'ritirato' | 'scaduto' }
 
 // Rifiuto di una proposta da parte del lettore.
 // Dopo il rifiuto, rilancia il matching per richiesta e manoscritto.
@@ -280,7 +288,15 @@ export async function rifiutaProposta(
   const { data: p } = await supabaseAdmin.from('proposte').select('*').eq('id', idProposta).single()
   if (!p) return { ok: false, errore: 'Proposta non trovata', status: 404 }
   if (p.email_lettore !== emailLettore) return { ok: false, errore: 'Non autorizzato', status: 403 }
-  if (p.stato !== 'in_sospeso') return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409 }
+  if (p.stato !== 'in_sospeso') {
+    const { data: man } = await supabaseAdmin
+      .from('manoscritti')
+      .select('stato')
+      .eq('id', p.id_manoscritto)
+      .single()
+    const motivo = man?.stato === 'ritirato' ? 'ritirato' : 'scaduto'
+    return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409, motivo }
+  }
 
   await liberaProposta(p, 'rifiutata')
 

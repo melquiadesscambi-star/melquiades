@@ -119,8 +119,19 @@ function OrologioAntico({ scade_il }: { scade_il: string }) {
 export default function PropostaCard({ proposta }: { proposta: PropostaConOpera }) {
   const router = useRouter()
   const [fase, setFase] = useState<
-    'idle' | 'conferma-prompt' | 'rifiuto-prompt' | 'loading' | 'confermata' | 'rifiutata'
+    'idle' | 'conferma-prompt' | 'rifiuto-prompt' | 'loading' | 'confermata' | 'rifiutata' | 'chiusa'
   >('idle')
+  const [messaggioChiusura, setMessaggioChiusura] = useState<string | null>(null)
+
+  function mostraChiusura(motivo?: string) {
+    const testo =
+      motivo === 'ritirato'
+        ? 'Questo manoscritto è stato appena ritirato dal suo autore. Continueremo a cercare.'
+        : 'Il tempo per rispondere è scaduto. Continueremo a cercare.'
+    setMessaggioChiusura(testo)
+    setFase('chiusa')
+    setTimeout(() => router.refresh(), 3500)
+  }
 
   async function eseguiConferma() {
     setFase('loading')
@@ -133,7 +144,8 @@ export default function PropostaCard({ proposta }: { proposta: PropostaConOpera 
       setFase('confermata')
       setTimeout(() => router.refresh(), 2500)
     } else {
-      setFase('idle')
+      const dati = await res.json().catch(() => ({}))
+      mostraChiusura(dati.motivo)
     }
   }
 
@@ -148,9 +160,29 @@ export default function PropostaCard({ proposta }: { proposta: PropostaConOpera 
       setFase('rifiutata')
       setTimeout(() => router.refresh(), 2500)
     } else {
-      setFase('idle')
+      const dati = await res.json().catch(() => ({}))
+      mostraChiusura(dati.motivo)
     }
   }
+
+  useEffect(() => {
+    const controlla = async () => {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const res = await fetch(`/api/proposte/${proposta.id_proposta}/stato`)
+        if (!res.ok) return
+        const dati = await res.json()
+        if (!dati.valida) {
+          router.refresh()
+        }
+      } catch {
+        // rete assente o errore temporaneo: riproveremo al prossimo giro
+      }
+    }
+    if (['confermata', 'rifiutata', 'chiusa', 'loading'].includes(fase)) return
+    const id = setInterval(controlla, 60000)
+    return () => clearInterval(id)
+  }, [proposta.id_proposta, router, fase])
 
   const { opera } = proposta
 
@@ -172,6 +204,16 @@ export default function PropostaCard({ proposta }: { proposta: PropostaConOpera 
       <div className="mb-10 p-8" style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)', textAlign: 'center' }}>
         <p style={{ fontFamily: 'EB Garamond, Georgia, serif', fontSize: 18, color: 'var(--blu-grigio)', fontStyle: 'italic' }}>
           Continueremo a cercare.
+        </p>
+      </div>
+    )
+  }
+
+  if (fase === 'chiusa') {
+    return (
+      <div className="mb-10 p-8" style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'EB Garamond, Georgia, serif', fontSize: 18, color: 'var(--blu-grigio)', fontStyle: 'italic', lineHeight: 1.6 }}>
+          {messaggioChiusura}
         </p>
       </div>
     )
