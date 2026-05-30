@@ -244,9 +244,9 @@ export default async function DashboardPage() {
           ) : haManoscrittoAttivo ? (
             <div className="p-5" style={{ border: '1px solid color-mix(in srgb, var(--oro) 30%, transparent)' }}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full" style={{ background: manoscrittoInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }} />
-                <span className="font-serif text-sm" style={{ color: manoscrittoInProposta ? 'var(--blu-grigio)' : 'var(--oro)' }}>
-                  {manoscrittoInProposta ? 'In valutazione' : 'Manoscritto in attesa'}
+                <span className="w-2 h-2 rounded-full" style={{ background: 'var(--oro)' }} />
+                <span className="font-serif text-sm" style={{ color: 'var(--oro)' }}>
+                  Manoscritto in attesa
                 </span>
               </div>
               {manoscrittoVisualizzato && (
@@ -259,10 +259,10 @@ export default async function DashboardPage() {
                   </p>
                 </div>
               )}
-              {manoscrittoAttivo && (
+              {manoscrittoVisualizzato && (
                 <div style={{ borderTop: '1px solid color-mix(in srgb, var(--oro) 20%, transparent)', paddingTop: '12px', marginTop: '12px' }}>
                   <BottoneRitira
-                    id={manoscrittoAttivo.id}
+                    id={manoscrittoVisualizzato.id}
                     tipo="manoscritto"
                     label="Ritira il manoscritto"
                     messaggioConferma="Sei sicuro? Potrai caricarne uno nuovo quando vuoi."

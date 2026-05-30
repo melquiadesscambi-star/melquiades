@@ -115,14 +115,14 @@ export default async function ProfiloPage() {
                   style={{
                     background: m.stato === 'matchato'
                       ? 'var(--oro)'
-                      : m.stato === 'in_attesa'
+                      : (m.stato === 'in_attesa' || m.stato === 'in_proposta')
                       ? 'var(--blu-notte)'
                       : 'var(--blu-grigio)',
                     color: 'var(--avorio)',
                     opacity: m.stato === 'ritirato' ? 0.5 : 1,
                   }}
                 >
-                  {m.stato === 'matchato' ? 'Matchato' : m.stato === 'in_attesa' ? 'In attesa' : 'Ritirato'}
+                  {m.stato === 'matchato' ? 'Matchato' : (m.stato === 'in_attesa' || m.stato === 'in_proposta') ? 'In attesa' : 'Ritirato'}
                 </span>
               </div>
             ))}
@@ -157,14 +157,14 @@ export default async function ProfiloPage() {
                   style={{
                     background: r.stato === 'matchata'
                       ? 'var(--oro)'
-                      : r.stato === 'in_attesa'
+                      : (r.stato === 'in_attesa' || r.stato === 'in_proposta')
                       ? 'var(--blu-notte)'
                       : 'var(--blu-grigio)',
                     color: 'var(--avorio)',
                     opacity: r.stato === 'ritirata' ? 0.5 : 1,
                   }}
                 >
-                  {r.stato === 'matchata' ? 'Matchata' : r.stato === 'in_attesa' ? 'In attesa' : 'Ritirata'}
+                  {r.stato === 'matchata' ? 'Matchata' : (r.stato === 'in_attesa' || r.stato === 'in_proposta') ? 'In attesa' : 'Ritirata'}
                 </span>
               </div>
             ))}
