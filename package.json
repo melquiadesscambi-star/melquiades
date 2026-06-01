@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "benchmark": "tsx scripts/benchmark/index.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.3.0",
@@ -22,6 +23,8 @@
     "react-dom": "^18"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
+    "dotenv": "^16.4.5",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^18",
