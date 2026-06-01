@@ -121,6 +121,8 @@ export async function apriProposta(
 }
 
 // Esegue il match reale (chiamata solo alla conferma di una proposta).
+// Rivendica ENTRAMBE le righe (manoscritto e richiesta) via compare-and-swap
+// PRIMA di creare il match, con rollback se qualcosa è stato ritirato nel frattempo.
 export async function eseguiMatch(
   idManoscritto: string,
   idRichiesta: string
@@ -132,48 +134,52 @@ export async function eseguiMatch(
   if (!manoscritto || !richiesta) throw new Error('Entità non trovate')
 
   const { data: utenteLettore } = await supabaseAdmin
-    .from('utenti')
-    .select('sbloccato')
-    .eq('email', richiesta.email_lettore)
-    .single()
+    .from('utenti').select('sbloccato').eq('email', richiesta.email_lettore).single()
   const primoMatchLettore = !utenteLettore?.sbloccato
 
+  // CLAIM 1: rivendica il manoscritto solo se ancora in_proposta.
+  const { data: mClaim } = await supabaseAdmin
+    .from('manoscritti').update({ stato: 'matchato' })
+    .eq('id', idManoscritto).eq('stato', 'in_proposta').select()
+  if (!mClaim || mClaim.length === 0) {
+    throw new Error('CONFLITTO_RITIRO: il manoscritto non è più disponibile')
+  }
+
+  // CLAIM 2: rivendica la richiesta solo se ancora in_proposta.
+  const { data: rClaim } = await supabaseAdmin
+    .from('richieste').update({ stato: 'matchata' })
+    .eq('id', idRichiesta).eq('stato', 'in_proposta').select()
+  if (!rClaim || rClaim.length === 0) {
+    // Rollback del manoscritto e abort.
+    await supabaseAdmin.from('manoscritti').update({ stato: 'in_proposta' }).eq('id', idManoscritto)
+    throw new Error('CONFLITTO_RITIRO: la richiesta non è più disponibile')
+  }
+
+  // Entrambi rivendicati: crea il match.
   const { data: match, error: matchError } = await supabaseAdmin
-    .from('match')
-    .insert({
+    .from('match').insert({
       email_scrittore: manoscritto.email_scrittore,
       email_lettore: richiesta.email_lettore,
       id_manoscritto: idManoscritto,
       id_richiesta: idRichiesta,
       primo_match_lettore: primoMatchLettore,
-    })
-    .select()
-    .single()
-  if (matchError || !match) throw new Error('Errore creazione match')
-
-  const { data: manAgg } = await supabaseAdmin
-    .from('manoscritti')
-    .update({ stato: 'matchato', id_match: match.id })
-    .eq('id', idManoscritto)
-    .eq('stato', 'in_proposta') // solo se non è stato ritirato nel frattempo
-    .select()
-
-  if (!manAgg || manAgg.length === 0) {
-    // Il manoscritto è stato ritirato durante la conferma: annulla il match appena creato.
-    await supabaseAdmin.from('match').delete().eq('id', match.id)
-    throw new Error('CONFLITTO_RITIRO: il manoscritto non è più disponibile')
+    }).select().single()
+  if (matchError || !match) {
+    // Rollback di entrambi.
+    await Promise.all([
+      supabaseAdmin.from('manoscritti').update({ stato: 'in_proposta' }).eq('id', idManoscritto),
+      supabaseAdmin.from('richieste').update({ stato: 'in_proposta' }).eq('id', idRichiesta),
+    ])
+    throw new Error('Errore creazione match')
   }
 
-  await supabaseAdmin
-    .from('richieste')
-    .update({ stato: 'matchata', id_match: match.id })
-    .eq('id', idRichiesta)
-
+  // Aggancia id_match e sblocca il lettore se è il primo match.
+  await Promise.all([
+    supabaseAdmin.from('manoscritti').update({ id_match: match.id }).eq('id', idManoscritto),
+    supabaseAdmin.from('richieste').update({ id_match: match.id }).eq('id', idRichiesta),
+  ])
   if (primoMatchLettore) {
-    await supabaseAdmin
-      .from('utenti')
-      .update({ sbloccato: true })
-      .eq('email', richiesta.email_lettore)
+    await supabaseAdmin.from('utenti').update({ sbloccato: true }).eq('email', richiesta.email_lettore)
   }
 
   return { id: match.id, primoMatchLettore }
@@ -294,11 +300,16 @@ export async function confermaProposta(
     return { ok: true, matchId, primoMatchLettore, idManoscritto: p.id_manoscritto, idRichiesta: p.id_richiesta }
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('CONFLITTO_RITIRO')) {
-      // Il manoscritto è stato ritirato durante la conferma: la proposta decade.
       await supabaseAdmin
-        .from('proposte')
-        .update({ stato: 'scaduta' })
-        .eq('id', idProposta)
+        .from('proposte').update({ stato: 'scaduta' })
+        .eq('id', idProposta).eq('stato', 'confermata')
+      // Libera solo la parte ancora appesa in_proposta; quella ritirata resta com'è.
+      await Promise.all([
+        supabaseAdmin.from('manoscritti').update({ stato: 'in_attesa' })
+          .eq('id', p.id_manoscritto).eq('stato', 'in_proposta'),
+        supabaseAdmin.from('richieste').update({ stato: 'in_attesa' })
+          .eq('id', p.id_richiesta).eq('stato', 'in_proposta'),
+      ])
       return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409, motivo: 'ritirato' }
     }
     throw err
@@ -360,5 +371,81 @@ export async function rifiutaProposta(
     if (cand) await apriProposta(manoscritto.id, cand.id)
   }
 
+  return { ok: true }
+}
+
+// ----------------------------------------------------------------------------
+// RITIRO ATOMICO — singola fonte di verità per route e benchmark.
+// ----------------------------------------------------------------------------
+
+export type EsitoRitiro = { ok: true } | { ok: false; errore: string; status: number }
+
+export async function ritiraManoscritto(
+  id: string,
+  emailScrittore?: string
+): Promise<EsitoRitiro> {
+  const { data: m } = await supabaseAdmin
+    .from('manoscritti').select('email_scrittore, stato').eq('id', id).single()
+  if (!m) return { ok: false, errore: 'Non trovato', status: 404 }
+  if (emailScrittore && m.email_scrittore !== emailScrittore)
+    return { ok: false, errore: 'Non autorizzato', status: 403 }
+  if (!['in_attesa', 'in_proposta'].includes(m.stato))
+    return { ok: false, errore: 'Non puoi ritirare un manoscritto già matchato.', status: 400 }
+
+  // CAS: rivendica il manoscritto per il ritiro solo se ancora ritirabile.
+  const { data: vinti } = await supabaseAdmin
+    .from('manoscritti').update({ stato: 'ritirato' })
+    .eq('id', id).in('stato', ['in_attesa', 'in_proposta']).select()
+  if (!vinti || vinti.length === 0) {
+    return { ok: false, errore: 'Non puoi ritirare un manoscritto già matchato.', status: 400 }
+  }
+
+  // Chiudi l'eventuale proposta in sospeso (CAS) e libera la richiesta del lettore.
+  const { data: proposta } = await supabaseAdmin
+    .from('proposte').select('id, id_richiesta')
+    .eq('id_manoscritto', id).eq('stato', 'in_sospeso').maybeSingle()
+  if (proposta) {
+    const { data: chiusa } = await supabaseAdmin
+      .from('proposte').update({ stato: 'scaduta', risposta_il: new Date().toISOString() })
+      .eq('id', proposta.id).eq('stato', 'in_sospeso').select()
+    if (chiusa && chiusa.length > 0) {
+      await supabaseAdmin.from('richieste').update({ stato: 'in_attesa' })
+        .eq('id', proposta.id_richiesta).eq('stato', 'in_proposta')
+    }
+  }
+  return { ok: true }
+}
+
+export async function ritiraRichiesta(
+  id: string,
+  emailLettore?: string
+): Promise<EsitoRitiro> {
+  const { data: r } = await supabaseAdmin
+    .from('richieste').select('email_lettore, stato').eq('id', id).single()
+  if (!r) return { ok: false, errore: 'Non trovata', status: 404 }
+  if (emailLettore && r.email_lettore !== emailLettore)
+    return { ok: false, errore: 'Non autorizzato', status: 403 }
+  if (!['in_attesa', 'in_proposta'].includes(r.stato))
+    return { ok: false, errore: 'Non puoi ritirare una richiesta già matchata.', status: 400 }
+
+  const { data: vinte } = await supabaseAdmin
+    .from('richieste').update({ stato: 'ritirata' })
+    .eq('id', id).in('stato', ['in_attesa', 'in_proposta']).select()
+  if (!vinte || vinte.length === 0) {
+    return { ok: false, errore: 'Non puoi ritirare una richiesta già matchata.', status: 400 }
+  }
+
+  const { data: proposta } = await supabaseAdmin
+    .from('proposte').select('id, id_manoscritto')
+    .eq('id_richiesta', id).eq('stato', 'in_sospeso').maybeSingle()
+  if (proposta) {
+    const { data: chiusa } = await supabaseAdmin
+      .from('proposte').update({ stato: 'scaduta', risposta_il: new Date().toISOString() })
+      .eq('id', proposta.id).eq('stato', 'in_sospeso').select()
+    if (chiusa && chiusa.length > 0) {
+      await supabaseAdmin.from('manoscritti').update({ stato: 'in_attesa' })
+        .eq('id', proposta.id_manoscritto).eq('stato', 'in_proposta')
+    }
+  }
   return { ok: true }
 }

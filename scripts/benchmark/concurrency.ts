@@ -19,6 +19,7 @@ import {
   getProposta,
   contaMatchPerManoscritto,
   ritiraManoscritto,
+  ritiraRichiesta,
   neutralizzaScenario,
   type Supa,
   type Matching,
@@ -162,6 +163,59 @@ export async function provaF2(
   }
 }
 
+// ----------------------------------------------------------------------------
+// F3 — ritiro RICHIESTA e conferma simultanei (speculare a F2).
+// Atteso COERENTE: O match avvenuto O proposta chiusa, mai entrambi; R non può
+// essere contemporaneamente 'ritirata' e parte di un match attivo.
+// ----------------------------------------------------------------------------
+export async function provaF3(
+  supa: Supa,
+  matching: Matching,
+  ripetizioni: number
+): Promise<RisultatoProva> {
+  const dettagli: string[] = []
+  let coerenti = 0
+
+  for (let rep = 0; rep < ripetizioni; rep++) {
+    const slug = `F3-${rep}`
+    const { idM, idR, idP, lettore } = await setupProposta(supa, matching, slug)
+
+    await Promise.all([
+      ritiraRichiesta(supa, idR),
+      matching.confermaProposta(idP, lettore),
+    ])
+
+    const m = await getManoscritto(supa, idM)
+    const r = await getRichiesta(supa, idR)
+    const p = await getProposta(supa, idP)
+    const nMatch = await contaMatchPerManoscritto(supa, idM)
+
+    let coerente = false
+    if (r.stato === 'matchata') {
+      // Match avvenuto: niente ritiro, esattamente un match, P confermata, M matchato.
+      coerente = nMatch === 1 && p.stato === 'confermata' && m.stato === 'matchato'
+    } else if (r.stato === 'ritirata') {
+      // Proposta chiusa: nessun match, P scaduta, M rimesso in coda.
+      coerente = nMatch === 0 && p.stato === 'scaduta' && m.stato === 'in_attesa'
+    }
+    if (coerente) coerenti++
+    dettagli.push(
+      `rep ${rep}: M=${m.stato} R=${r.stato} P=${p.stato} match=${nMatch} → ${coerente ? 'COERENTE' : 'INCOERENTE'}`
+    )
+
+    await neutralizzaScenario(supa, slug)
+  }
+
+  return {
+    nome: 'F3 ritiro_richiesta_e_conferma_simultanei',
+    descrizione:
+      'ritiraRichiesta() e confermaProposta() simultanei: o match o proposta chiusa, mai entrambi.',
+    ripetizioni,
+    coerenti,
+    dettagli,
+  }
+}
+
 export async function eseguiConcorrenza(
   supa: Supa,
   matching: Matching,
@@ -169,5 +223,6 @@ export async function eseguiConcorrenza(
 ): Promise<RisultatoProva[]> {
   const f1 = await provaF1(supa, matching, ripetizioni)
   const f2 = await provaF2(supa, matching, ripetizioni)
-  return [f1, f2]
+  const f3 = await provaF3(supa, matching, ripetizioni)
+  return [f1, f2, f3]
 }

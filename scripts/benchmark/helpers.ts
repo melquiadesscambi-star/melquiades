@@ -278,65 +278,24 @@ export async function forzaScadenza(supa: Supa, idProposta: string): Promise<voi
 }
 
 // ----------------------------------------------------------------------------
-// RITIRO — replica ESATTA delle route PATCH.
+// RITIRO — delega alle funzioni REALI di lib/matching (singola fonte di verità).
+// Così il benchmark prova il codice di produzione e non una copia.
+//
+// Import DINAMICO di lib/matching: a runtime caricaEnv() è già stato chiamato dal
+// runner, quindi lib/supabase (e quindi matching) legge le env corrette. Le funzioni
+// di matching usano lo stesso client supabaseAdmin: il param `supa` resta nella firma
+// per compatibilità ma non serve passarlo. Niente emailScrittore/emailLettore: il
+// benchmark non simula il controllo di proprietà.
 // ----------------------------------------------------------------------------
 
-// Replica app/api/manoscritti/[id]/route.ts.
-export async function ritiraManoscritto(supa: Supa, id: string): Promise<void> {
-  const { data: manoscritto } = await supa
-    .from('manoscritti')
-    .select('email_scrittore, stato')
-    .eq('id', id)
-    .single()
-  if (!manoscritto) return
-  if (!['in_attesa', 'in_proposta'].includes(manoscritto.stato)) return
-
-  if (manoscritto.stato === 'in_proposta') {
-    const { data: proposta } = await supa
-      .from('proposte')
-      .select('id, id_richiesta')
-      .eq('id_manoscritto', id)
-      .eq('stato', 'in_sospeso')
-      .single()
-    if (proposta) {
-      await supa
-        .from('proposte')
-        .update({ stato: 'scaduta', risposta_il: new Date().toISOString() })
-        .eq('id', proposta.id)
-      await supa.from('richieste').update({ stato: 'in_attesa' }).eq('id', proposta.id_richiesta)
-    }
-  }
-
-  await supa.from('manoscritti').update({ stato: 'ritirato' }).eq('id', id)
+export async function ritiraManoscritto(_supa: Supa, id: string): Promise<void> {
+  const matching = await import('../../lib/matching')
+  await matching.ritiraManoscritto(id)
 }
 
-// Replica app/api/richieste/[id]/route.ts.
-export async function ritiraRichiesta(supa: Supa, id: string): Promise<void> {
-  const { data: richiesta } = await supa
-    .from('richieste')
-    .select('email_lettore, stato')
-    .eq('id', id)
-    .single()
-  if (!richiesta) return
-  if (!['in_attesa', 'in_proposta'].includes(richiesta.stato)) return
-
-  if (richiesta.stato === 'in_proposta') {
-    const { data: proposta } = await supa
-      .from('proposte')
-      .select('id, id_manoscritto')
-      .eq('id_richiesta', id)
-      .eq('stato', 'in_sospeso')
-      .single()
-    if (proposta) {
-      await supa
-        .from('proposte')
-        .update({ stato: 'scaduta', risposta_il: new Date().toISOString() })
-        .eq('id', proposta.id)
-      await supa.from('manoscritti').update({ stato: 'in_attesa' }).eq('id', proposta.id_manoscritto)
-    }
-  }
-
-  await supa.from('richieste').update({ stato: 'ritirata' }).eq('id', id)
+export async function ritiraRichiesta(_supa: Supa, id: string): Promise<void> {
+  const matching = await import('../../lib/matching')
+  await matching.ritiraRichiesta(id)
 }
 
 // ----------------------------------------------------------------------------
