@@ -151,16 +151,23 @@ export async function eseguiMatch(
     .single()
   if (matchError || !match) throw new Error('Errore creazione match')
 
-  await Promise.all([
-    supabaseAdmin
-      .from('manoscritti')
-      .update({ stato: 'matchato', id_match: match.id })
-      .eq('id', idManoscritto),
-    supabaseAdmin
-      .from('richieste')
-      .update({ stato: 'matchata', id_match: match.id })
-      .eq('id', idRichiesta),
-  ])
+  const { data: manAgg } = await supabaseAdmin
+    .from('manoscritti')
+    .update({ stato: 'matchato', id_match: match.id })
+    .eq('id', idManoscritto)
+    .eq('stato', 'in_proposta') // solo se non è stato ritirato nel frattempo
+    .select()
+
+  if (!manAgg || manAgg.length === 0) {
+    // Il manoscritto è stato ritirato durante la conferma: annulla il match appena creato.
+    await supabaseAdmin.from('match').delete().eq('id', match.id)
+    throw new Error('CONFLITTO_RITIRO: il manoscritto non è più disponibile')
+  }
+
+  await supabaseAdmin
+    .from('richieste')
+    .update({ stato: 'matchata', id_match: match.id })
+    .eq('id', idRichiesta)
 
   if (primoMatchLettore) {
     await supabaseAdmin
@@ -268,13 +275,34 @@ export async function confermaProposta(
     return { ok: false, errore: 'Il tempo per rispondere è scaduto', status: 410 }
   }
 
-  const { id: matchId, primoMatchLettore } = await eseguiMatch(p.id_manoscritto, p.id_richiesta)
-  await supabaseAdmin
+  // Compare-and-swap atomico: vince la proposta solo chi la trova ancora 'in_sospeso'.
+  const { data: vinte } = await supabaseAdmin
     .from('proposte')
     .update({ stato: 'confermata', risposta_il: new Date().toISOString() })
     .eq('id', idProposta)
+    .eq('stato', 'in_sospeso') // ← la guardia: aggiorna solo se ancora in sospeso
+    .select()
 
-  return { ok: true, matchId, primoMatchLettore, idManoscritto: p.id_manoscritto, idRichiesta: p.id_richiesta }
+  if (!vinte || vinte.length === 0) {
+    // Un'altra esecuzione simultanea ha già chiuso questa proposta.
+    return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409 }
+  }
+
+  // Solo ora, dopo aver vinto atomicamente la proposta, esegue il match.
+  try {
+    const { id: matchId, primoMatchLettore } = await eseguiMatch(p.id_manoscritto, p.id_richiesta)
+    return { ok: true, matchId, primoMatchLettore, idManoscritto: p.id_manoscritto, idRichiesta: p.id_richiesta }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('CONFLITTO_RITIRO')) {
+      // Il manoscritto è stato ritirato durante la conferma: la proposta decade.
+      await supabaseAdmin
+        .from('proposte')
+        .update({ stato: 'scaduta' })
+        .eq('id', idProposta)
+      return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409, motivo: 'ritirato' }
+    }
+    throw err
+  }
 }
 
 type EsitoRifiuto = { ok: true } | { ok: false; errore: string; status: number; motivo?: 'ritirato' | 'scaduto' }
@@ -298,7 +326,25 @@ export async function rifiutaProposta(
     return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409, motivo }
   }
 
-  await liberaProposta(p, 'rifiutata')
+  // Compare-and-swap atomico: vince il rifiuto solo chi trova la proposta ancora 'in_sospeso'.
+  const { data: vinte } = await supabaseAdmin
+    .from('proposte')
+    .update({ stato: 'rifiutata', risposta_il: new Date().toISOString() })
+    .eq('id', idProposta)
+    .eq('stato', 'in_sospeso')
+    .select()
+
+  if (!vinte || vinte.length === 0) {
+    // Un'altra esecuzione simultanea ha già chiuso questa proposta.
+    return { ok: false, errore: 'Questa proposta non è più disponibile', status: 409 }
+  }
+
+  // La proposta è già stata segnata 'rifiutata' dal compare-and-swap: rimette solo
+  // manoscritto e richiesta in coda (senza richiamare liberaProposta per non duplicare l'update).
+  await Promise.all([
+    supabaseAdmin.from('manoscritti').update({ stato: 'in_attesa' }).eq('id', p.id_manoscritto),
+    supabaseAdmin.from('richieste').update({ stato: 'in_attesa' }).eq('id', p.id_richiesta),
+  ])
 
   // Re-matching: la richiesta torna attiva e cerca un altro manoscritto.
   const { data: richiesta } = await supabaseAdmin.from('richieste').select('*').eq('id', p.id_richiesta).single()
